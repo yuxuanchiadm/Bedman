@@ -8,10 +8,15 @@ api-version: 1.8
 main: org.yuxuan.bedman.PluginMain
 
 commands:
+  bedman:
+    description: Open bedman teleportation menu
+    aliases: bm
+    permission: bedman.open
+    usage: /bedman [player]
   bedinfo:
     description: Get player bed info
     aliases: bi
-    permission: bedman.open
+    permission: bedman.info
     usage: /bedinfo [player]
   tpbed:
     description: Teleport to player's bed location
@@ -20,6 +25,9 @@ commands:
     usage: /tpbed [player]
 permissions:
   bedman.open:
+    description: Allows open bedman teleportation menu.
+    default: op
+  bedman.info:
     description: Allows get player bed info.
     default: op
   bedman.tp:
