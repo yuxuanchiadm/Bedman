@@ -1,9 +1,8 @@
 ﻿name: Bedman
-version: 1.0.0
+version: 1.0.1
 depend: []
 softdepend: []
 loadbefore: []
-api-version: 1.8
 
 main: org.yuxuan.bedman.PluginMain
 
