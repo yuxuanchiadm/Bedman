@@ -1,0 +1,27 @@
+﻿name: Bedman
+version: 1.0.0
+depend: []
+softdepend: []
+loadbefore: []
+api-version: 1.8
+
+main: org.yuxuan.bedman.PluginMain
+
+commands:
+  bedinfo:
+    description: Get player bed info
+    aliases: bi
+    permission: bedman.open
+    usage: /bedinfo [player]
+  tpbed:
+    description: Teleport to player's bed location
+    aliases: tpb
+    permission: bedman.tp
+    usage: /tpbed [player]
+permissions:
+  bedman.open:
+    description: Allows get player bed info.
+    default: op
+  bedman.tp:
+    description: Allows teleport to player's bed location.
+    default: op
