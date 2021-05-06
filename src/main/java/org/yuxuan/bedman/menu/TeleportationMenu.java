@@ -1,10 +1,15 @@
 package org.yuxuan.bedman.menu;
 
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.stream.Collectors;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -15,12 +20,55 @@ public final class TeleportationMenu extends SingleDisplayMenu {
 	private static final int SINGLE_PAGE_MAX_TARGET_COUNT = SINGLE_LINE_MAX_TARGET_COUNT * 6;
 
 	private final List<OfflinePlayer> targets;
+	private final Queue<String> pendingIcons;
+	private volatile boolean closing;
 	private int page;
 
 	public TeleportationMenu(Player player, List<OfflinePlayer> targets) {
 		super(player);
 		this.targets = targets;
+		this.pendingIcons = targets.stream().map(OfflinePlayer::getName).collect(Collectors.toCollection(ConcurrentLinkedQueue::new));
+		this.closing = false;
 		updatePage();
+	}
+
+	@Override
+	protected boolean onMenuOpening(Player player) {
+		player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "正在加载玩家头像...");
+		runTaskAsync(() -> {
+			Inventory iconLoader = new DummyInventoryHolder().getInventory();
+			String icon;
+			while (!closing && (icon = pendingIcons.poll()) != null) {
+				ItemStack targetIcon = new ItemStack(Material.SKULL_ITEM, 1, (short) 3);
+				SkullMeta targetIconMeta = (SkullMeta) targetIcon.getItemMeta();
+				targetIconMeta.setOwner(icon);
+				targetIcon.setItemMeta(targetIconMeta);
+				iconLoader.setItem(0, targetIcon);
+			}
+			runTaskSync(() -> {
+				if (closing) {
+					player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "玩家头像加载被中断！");
+				} else {
+					player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "玩家头像加载完毕！");
+					updatePage();
+				}
+			});
+		});
+		return super.onMenuOpening(player);
+	}
+
+	@Override
+	protected void onMenuClosing(Player player) {
+		this.closing = true;
+		super.onMenuClosing(player);
+	}
+
+	private void runTaskAsync(Runnable runnable) {
+		PluginMain.getInstance().getServer().getScheduler().runTaskAsynchronously(PluginMain.getInstance(), runnable);
+	}
+
+	private void runTaskSync(Runnable runnable) {
+		PluginMain.getInstance().getServer().getScheduler().runTask(PluginMain.getInstance(), runnable);
 	}
 
 	private void updatePage() {
@@ -80,10 +128,12 @@ public final class TeleportationMenu extends SingleDisplayMenu {
 	public void drawTargetIcon(OfflinePlayer target, int x, int y) {
 		ItemStack targetIcon = new ItemStack(Material.SKULL_ITEM, 1, (short) 3);
 		SkullMeta targetIconMeta = (SkullMeta) targetIcon.getItemMeta();
-		targetIconMeta.setOwner(target.getName());
+		if (!pendingIcons.contains(target.getName())) {
+			targetIconMeta.setOwner(target.getName());
+		}
 		targetIconMeta.setDisplayName(target.getName());
 		targetIcon.setItemMeta(targetIconMeta);
-		addButton(x, y, targetIcon, event -> {
+		setButton(x, y, targetIcon, event -> {
 			Player player = event.getPlayer();
 			if (event.getMouse() == 0) {
 				PluginMain.getInstance().teleportToBed(player, target);
@@ -139,5 +189,18 @@ public final class TeleportationMenu extends SingleDisplayMenu {
 	public void displayMenu() {
 		updatePage();
 		super.displayMenu();
+	}
+}
+
+final class DummyInventoryHolder implements InventoryHolder {
+	private final Inventory inventory;
+
+	public DummyInventoryHolder() {
+		this.inventory = PluginMain.getInstance().getServer().createInventory(this, 9);
+	}
+
+	@Override
+	public Inventory getInventory() {
+		return inventory;
 	}
 }
