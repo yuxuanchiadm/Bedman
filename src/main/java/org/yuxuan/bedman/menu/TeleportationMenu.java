@@ -21,37 +21,42 @@ public final class TeleportationMenu extends SingleDisplayMenu {
 
 	private final List<OfflinePlayer> targets;
 	private final Queue<String> pendingIcons;
+	private volatile boolean loading;
 	private volatile boolean closing;
+	private volatile boolean updating;
 	private int page;
 
 	public TeleportationMenu(Player player, List<OfflinePlayer> targets) {
 		super(player);
 		this.targets = targets;
 		this.pendingIcons = targets.stream().map(OfflinePlayer::getName).collect(Collectors.toCollection(ConcurrentLinkedQueue::new));
+		this.loading = false;
 		this.closing = false;
+		this.updating = false;
 		updatePage();
 	}
 
 	@Override
 	protected boolean onMenuOpening(Player player) {
+		loading = true;
 		player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "正在加载玩家头像...");
 		runTaskAsync(() -> {
 			Inventory iconLoader = new DummyInventoryHolder().getInventory();
 			String icon;
-			while (!closing && (icon = pendingIcons.poll()) != null) {
+			while (!closing && (icon = pendingIcons.peek()) != null) {
 				ItemStack targetIcon = new ItemStack(Material.SKULL_ITEM, 1, (short) 3);
 				SkullMeta targetIconMeta = (SkullMeta) targetIcon.getItemMeta();
 				targetIconMeta.setOwner(icon);
 				targetIcon.setItemMeta(targetIconMeta);
 				iconLoader.setItem(0, targetIcon);
+				pendingIcons.remove();
+				updatePageSync();
 			}
 			runTaskSync(() -> {
-				if (closing) {
-					player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "玩家头像加载被中断！");
-				} else {
-					player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "玩家头像加载完毕！");
-					updatePage();
-				}
+				if (closing) player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "玩家头像加载被中断！");
+				else player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "玩家头像加载完毕！");
+				loading = false;
+				closing = false;
 			});
 		});
 		return super.onMenuOpening(player);
@@ -59,7 +64,10 @@ public final class TeleportationMenu extends SingleDisplayMenu {
 
 	@Override
 	protected void onMenuClosing(Player player) {
-		this.closing = true;
+		if (this.loading) {
+			this.closing = true;
+			player.sendMessage(PluginMain.PLUGIN_MSG_PREFIX + "正在尝试中断玩家头像加载...");
+		}
 		super.onMenuClosing(player);
 	}
 
@@ -69,6 +77,18 @@ public final class TeleportationMenu extends SingleDisplayMenu {
 
 	private void runTaskSync(Runnable runnable) {
 		PluginMain.getInstance().getServer().getScheduler().runTask(PluginMain.getInstance(), runnable);
+	}
+
+	private void updatePageSync() {
+		if (PluginMain.getInstance().getServer().isPrimaryThread()) {
+			updating = false;
+			if (closing) return;
+			updatePage();
+		} else {
+			if (closing || updating) return;
+			updating = true;
+			runTaskSync(this::updatePageSync);
+		}
 	}
 
 	private void updatePage() {
